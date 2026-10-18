@@ -1,0 +1,58 @@
+--- a/common.py
++++ b/common.py
+@@ -327,6 +327,40 @@
+     return buffer
+ 
+ 
++@lru_cache(maxsize=None)
++def _host_pointer_aliasing_required(device_index: int) -> bool:
++    from cuda.bindings import runtime
++
++    error, supported = runtime.cudaDeviceGetAttribute(
++        runtime.cudaDeviceAttr.cudaDevAttrCanUseHostPointerForRegisteredMem,
++        device_index,
++    )
++    if int(error) != 0:
++        raise RuntimeError("Cannot verify CUDA host-pointer capability")
++    return not bool(supported)
++
++
++def _alloc_wsl_owned_host_tensor(dims, dtype, device):
++    """Opt-in WSL workaround for the separate AOT direct-copy path.
++
++    PyTorch-owned pinned allocation has a device-visible address. Keep ownership
++    with PyTorch, and never cudaHostUnregister its allocation during teardown.
++    This only serves in-memory L2; custom/shared/distributed allocators are not
++    replaced. Unlike the upstream JIT patch, this also covers direct Mamba IO.
++    """
++    from cuda.bindings import runtime
++
++    assert device == "cpu"
++    buffer = torch.empty(dims, dtype=dtype, device=device, pin_memory=True)
++    if buffer.numel():
++        error, alias = runtime.cudaHostGetDevicePointer(buffer.data_ptr(), 0)
++        if int(error) != 0 or int(alias) != buffer.data_ptr():
++            raise RuntimeError("WSL HiCache pinned allocation has no matching device alias")
++    setattr(buffer, _CUDA_HOST_REGISTERED_RANGES_ATTR, [])
++    logger.info("WSL HiCache owned-pinned allocator: %.2f GB, same device alias verified", buffer.numel() * buffer.element_size() / 1e9)
++    return buffer
++
++
+ def alloc_with_host_register(
+     dims: tuple,
+     dtype: torch.dtype,
+@@ -344,6 +378,14 @@
+         assert device == "cpu", f"HiCache host pools are CPU memory; got {device!r}"
+         _log_hip_owned_host_pool()
+         return _alloc_hip_host_tensor(dims=dims, dtype=dtype)
++    if (
++        os.environ.get("SGLANG_WSL_HICACHE_PINNED_ALLOCATOR") == "1"
++        and pin_memory
++        and not _is_hip
++        and type(allocator) is HostTensorAllocator
++        and _host_pointer_aliasing_required(torch.cuda.current_device())
++    ):
++        return _alloc_wsl_owned_host_tensor(dims, dtype, device)
+     buffer = allocator.allocate(dims, dtype=dtype, device=device)
+     if pin_memory:
+         _cuda_host_register(buffer, registration_granularity_bytes)

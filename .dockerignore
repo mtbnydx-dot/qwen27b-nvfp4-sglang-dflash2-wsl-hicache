@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!patches/
+!patches/*.patch
+!scripts/
+!scripts/apply_patches.py

@@ -1,0 +1,19 @@
+Qwen 27B NVFP4 / SGLang / DFlash2 / WSL HiCache deployment recipe
+Copyright 2026 mtbnydx-dot and contributors
+
+SGLang is an upstream project by the SGLang Team and contributors, licensed
+under Apache-2.0. This repository is an independent deployment recipe, not
+an official NVIDIA, SGLang, Qwen, OrcaRouter or incoai distribution.
+
+patches/0001-sglang-pr40571-host-pointer-guard.patch is extracted from:
+  https://github.com/sgl-project/sglang/pull/40571
+  PR head: ca823fe4cfb4bba75360416929f74749721b9cb7
+Credit belongs to the upstream contributors; this repository does not claim
+authorship of that patch. See docs/implementation.md for scope and provenance.
+
+patches/0002-wsl-owned-pinned-allocator.patch is a local compatibility change
+to SGLang's default host allocator. It preserves upstream source licensing.
+
+Model weights, model licenses, the upstream container and third-party runtime
+dependencies are not redistributed here. Their licenses and access conditions
+remain separate from this repository's code license.
